@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Exoplanet Program — Cinematic (Real Continents + Bigger Impact)</title>
+<style>
+  :root{
+    --retro-green:#00ff66;
+    --panel-bg:rgba(3,10,12,0.82);
+    --ink:#c5ffd8;
+  }
+  html,body{
+    height:100%;margin:0;background:#000;color:var(--ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+    overflow:hidden;
+  }
+  canvas{display:block;width:100%;height:100vh;background:#01030a;image-rendering:pixelated;image-rendering:crisp-edges}
+
+  /* ---------- SIREN INTRO (visual-only) ---------- */
+  #intro{
+    position:fixed; inset:0; z-index:999; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; background:#000; color:#ff6666;
+    animation:alertFlash 1.2s infinite;
+  }
+  #intro h1{margin:0 0 12px 0; font-size:clamp(22px,3.5vw,36px); letter-spacing:2px; text-shadow:0 0 16px #f33}
+  #intro p{margin:0 0 16px 0; color:#ffd7d7; opacity:.9}
+  #launchBtn{
+    display:block; margin-top:6px; padding:12px 18px; border-radius:10px; border:2px solid #ff6;
+    background:#ff6; color:#101; cursor:pointer; font-weight:700
+  }
+  #launchBtn:hover{filter:brightness(1.1)}
+  @keyframes alertFlash{0%,100%{background-color:#200}50%{background-color:#000}}
+  .fadeOut{animation:fadeOut 900ms ease forwards}
+  @keyframes fadeOut{to{opacity:0;visibility:hidden}}
+
+  /* ---------- CORE UI ---------- */
+  #status{position:fixed;left:50%;top:8px;transform:translateX(-50%);z-index:60;color:var(--retro-green)}
+  #ui{position:fixed;left:16px;top:16px;z-index:60;display:flex;flex-direction:column;gap:10px}
+  .btn{background:transparent;color:var(--retro-green);border:1px solid var(--retro-green);padding:8px 12px;border-radius:8px;cursor:pointer}
+  .btn:hover{background:var(--retro-green);color:#00190a}
+  #infoPanel{position:fixed;right:16px;top:16px;width:340px;z-index:60;background:var(--panel-bg);border:2px solid var(--retro-green);border-radius:10px;padding:12px;display:none}
+  #arrivalButtons{position:fixed;left:50%;transform:translateX(-50%);bottom:88px;z-index:60;display:none;gap:10px}
+  #hud{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;z-index:60;display:flex;gap:18px;align-items:center;background:var(--panel-bg);padding:8px 14px;border-radius:10px;border:2px solid var(--retro-green)}
+  .bar{width:170px;height:14px;background:#062;border:1px solid var(--retro-green);position:relative;border-radius:6px;overflow:hidden}
+  .fill{height:100%;background:var(--retro-green);width:100%}
+
+  /* ---------- POST-LANDING CHECKLIST ---------- */
+  #postPanel{position:fixed;right:16px;bottom:16px;width:320px;z-index:60;background:var(--panel-bg);
+    border:2px solid var(--retro-green);border-radius:10px;padding:12px;display:none}
+  #postPanel h4{margin:0 0 8px 0;color:var(--retro-green)}
+  .step{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .check{width:14px;height:14px;border:1px solid var(--retro-green);border-radius:3px;display:inline-block;text-align:center;line-height:12px;font-size:12px}
+  .done{background:var(--retro-green);color:#00190a}
+  #missionBar{width:100%;height:10px;border:1px solid var(--retro-green);margin-top:8px;border-radius:6px;overflow:hidden;background:#052}
+  #missionFill{height:100%;width:0%;background:var(--retro-green)}
+  #postActions{display:flex;gap:8px;margin-top:10px}
+</style>
+</head>
+<body>
+  <!-- Visual siren intro -->
+  <div id="intro">
+    <h1>⚠ SYSTEM FAILURE — EARTH COLLAPSING</h1>
+    <p>Evacuation protocol: launch craft and select a new home.</p>
+    <button id="launchBtn">LAUNCH ESCAPE</button>
+  </div>
+
+  <canvas id="c"></canvas>
+
+  <div id="status">Choose a planet to explore</div>
+
+  <div id="ui">
+    <button class="btn" id="selectBtn" onclick="startSelectionMode()">☄️ Select Planet</button>
+    <button class="btn" onclick="toggleInfoPanel()">ℹ️ Details</button>
+  </div>
+
+  <div id="infoPanel">
+    <h3 id="infoTitle" style="margin:.25rem 0 .5rem 0;color:var(--retro-green)">Game Info</h3>
+    <div id="infoContent" style="font-size:14px;color:#b8ffd0">
+      <p>Welcome, pilot. Select a planet to initiate jump.</p>
+      <p><strong>Data:</strong> Planetary, Orbital, Stellar, Radiation.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn" onclick="showPlanetProps()">Planetary</button>
+      <button class="btn" onclick="showOrbitalProps()">Orbital</button>
+      <button class="btn" onclick="showStellarProps()">Stellar</button>
+      <button class="btn" onclick="showRadiationProps()">Radiation</button>
+    </div>
+  </div>
+
+  <div id="arrivalButtons">
+    <button class="btn" onclick="showPlanetProps()">Planetary Props</button>
+    <button class="btn" onclick="showStellarProps()">Scan Star</button>
+    <button class="btn" onclick="showRadiationProps()">Helmet Detail</button>
+  </div>
+
+  <div id="hud">
+    <div>Health <span id="healthValue">100%</span></div>
+    <div class="bar"><div id="healthBar" class="fill"></div></div>
+    <div>Hunger <span id="hungerValue">80%</span></div>
+    <div class="bar"><div id="hungerBar" class="fill" style="width:80%"></div></div>
+  </div>
+
+  <!-- Post-landing mission -->
+  <div id="postPanel">
+    <h4>Surface Mission</h4>
+    <div class="step"><span id="s1" class="check"> </span>1) Insert Orbit</div>
+    <div class="step"><span id="s2" class="check"> </span>2) Atmospheric Entry</div>
+    <div class="step"><span id="s3" class="check"> </span>3) Touchdown Confirmed</div>
+    <div class="step"><span id="s4" class="check"> </span>4) Deploy Satellite</div>
+    <div class="step"><span id="s5" class="check"> </span>5) Surface Scan & Samples</div>
+    <div id="missionBar"><div id="missionFill"></div></div>
+    <div id="postActions">
+      <button class="btn" onclick="advanceMission()">Advance ▶</button>
+      <button class="btn" onclick="skipMission()">Skip</button>
+      <button class="btn" onclick="resetMission()">Replay</button>
+    </div>
+  </div>
+
+<script>
+/* ======================= DATA ======================= */
+const planets={
+  "W7-21":{name:"W7-21",seed:721,skyTint:[8,18,40],surfaceTint:[140,150,165],
+    planetaryProps:`Radius: 10,551,690.55 m<br/>Mass: 2.568 × 10^25 kg (4.3 M⊕)<br/>Gravity: 15.38 m/s²`,
+    orbitalProps:`Orbit Period: 17.8 days<br/>Orbit Radius: 0.0842 AU`,
+    stellarProps:`Star Class: M3<br/>Temp: 3500 K`,
+    radiation:`Flux: 8500 W/m²`,
+    temp:410},
+  "X9-Zenith":{name:"X9-Zenith",seed:909,skyTint:[5,14,32],surfaceTint:[120,135,150],
+    planetaryProps:`Radius: 7,500,000 m<br/>Mass: 1.8 × 10^25 kg<br/>Gravity: 9.8 m/s²`,
+    orbitalProps:`Orbit Period: 120 days<br/>Orbit Radius: 0.3 AU`,
+    stellarProps:`Star Class: K2<br/>Temp: 4700 K`,
+    radiation:`Radiation: 4300 W/m²`,
+    temp:290},
+  "Orion-5":{name:"Orion-5",seed:405,skyTint:[6,16,35],surfaceTint:[150,142,160],
+    planetaryProps:`Radius: 12,000,000 m<br/>Mass: 3.0 × 10^25 kg<br/>Gravity: 18.2 m/s²`,
+    orbitalProps:`Orbit Period: 45 days<br/>Orbit Radius: 0.14 AU`,
+    stellarProps:`Star Class: M1<br/>Temp: 3600 K`,
+    radiation:`Radiation: 6200 W/m²`,
+    temp:330}
+};
+let selectedPlanet=null;
+
+/* ======================= CANVAS/RES ======================= */
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d',{alpha:false});
+let DPR=window.devicePixelRatio||1;
+function resize(){
+  DPR=window.devicePixelRatio||1;
+  canvas.width=Math.floor(innerWidth*DPR);
+  canvas.height=Math.floor(innerHeight*DPR);
+  canvas.style.width=innerWidth+'px';
+  canvas.style.height=innerHeight+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.imageSmoothingEnabled=false;
+  initStars(); terrainCache=null; initDust();
+  earthTex=null; // rebuild on resize
+}
+addEventListener('resize',resize);
+
+/* Look-around parallax (X + Y) */
+let lookX=0,lookXTarget=0,lookY=0,lookYTarget=0, sway=0;
+addEventListener('mousemove',e=>{
+  lookXTarget=(e.clientX/innerWidth-0.5)*260;  // a bit more movement
+  lookYTarget=(e.clientY/innerHeight-0.5)*180;
+});
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a') lookXTarget-=20;
+  if(e.key==='ArrowRight'||e.key==='d') lookXTarget+=20;
+  if(e.key==='ArrowUp'||e.key==='w') lookYTarget-=14;
+  if(e.key==='ArrowDown'||e.key==='s') lookYTarget+=14;
+});
+function updateLook(dt=16){
+  lookX += (lookXTarget-lookX)*0.12;
+  lookY += (lookYTarget-lookY)*0.12;
+  sway += dt*0.0018;
+}
+
+/* ======================= INTRO & CUTSCENE (REAL CONTINENTS + LONGER IMPACT) ======================= */
+let mode='prologue';
+const intro=document.getElementById('intro');
+const launchBtn=document.getElementById('launchBtn');
+launchBtn.addEventListener('click', startLaunch);
+window.addEventListener('keydown',e=>{ if(mode==='prologue'&&(e.key==='Enter'||e.key===' ')) startLaunch(); });
+intro.addEventListener('click',e=>{ if(e.target===intro && mode==='prologue') startLaunch(); });
+
+function startLaunch(){ intro.classList.add('fadeOut'); setTimeout(()=>{intro.style.display='none'; startCutscene();},900); }
+let cutStart=0;
+
+/* Offscreen earth texture (stable) */
+let earthTex=null, earthR=0;
+function buildEarthTexture(R){
+  earthR = R;
+  const S = Math.ceil(R*2+4);
+  const off = document.createElement('canvas');
+  off.width = off.height = S;
+  const ox = off.getContext('2d');
+
+  // Ocean (radial gradient + subtle rim)
+  const g = ox.createRadialGradient(S*0.35,S*0.35,R*0.25, S/2,S/2,R);
+  g.addColorStop(0,'#1b69cb'); g.addColorStop(1,'#0a3b7a');
+  ox.fillStyle=g; ox.beginPath(); ox.arc(S/2,S/2,R,0,Math.PI*2); ox.fill();
+
+  // Clip to sphere
+  ox.save(); ox.beginPath(); ox.arc(S/2,S/2,R-1,0,Math.PI*2); ox.clip();
+
+  // --- CONTINENTS (hand-drawn paths; simple but recognizable) ---
+  const land = '#2e8b57', coast = 'rgba(255,255,255,0.08)';
+  ox.fillStyle = land;
+
+  // Helper to draw a rounded polygon
+  function blobPath(points, close=true){
+    ox.beginPath();
+    ox.moveTo(points[0][0], points[0][1]);
+    for(let i=1;i<points.length;i++){
+      const [x,y] = points[i];
+      ox.lineTo(x,y);
+    }
+    if(close) ox.closePath();
+  }
+
+  const Cx=S/2, Cy=S/2, rx=R*0.85, ry=R*0.75; // projection-ish scaling
+
+  // Americas (left side)
+  blobPath([
+    [Cx-rx*0.70, Cy-ry*0.10], // N America top-left
+    [Cx-rx*0.55, Cy-ry*0.30],
+    [Cx-rx*0.40, Cy-ry*0.28],
+    [Cx-rx*0.45, Cy-ry*0.10],
+    [Cx-rx*0.50, Cy+ry*0.10],
+    [Cx-rx*0.38, Cy+ry*0.28], // Central America link
+    [Cx-rx*0.32, Cy+ry*0.35], // N tip S America
+    [Cx-rx*0.38, Cy+ry*0.58],
+    [Cx-rx*0.48, Cy+ry*0.65],
+    [Cx-rx*0.58, Cy+ry*0.55],
+    [Cx-rx*0.65, Cy+ry*0.30]
+  ]); ox.fill();
+
+  // Greenland
+  ox.beginPath();
+  ox.ellipse(Cx-rx*0.53, Cy-ry*0.45, rx*0.10, ry*0.07, -0.2, 0, Math.PI*2);
+  ox.fill();
+
+  // Africa + Europe (center-right)
+  blobPath([
+    [Cx+rx*0.00,  Cy-ry*0.30],  // Europe W
+    [Cx+rx*0.12,  Cy-ry*0.28],
+    [Cx+rx*0.20,  Cy-ry*0.18],  // Mediterranean curve
+    [Cx+rx*0.16,  Cy-ry*0.02],
+    [Cx+rx*0.12,  Cy+ry*0.12],  // N Africa
+    [Cx+rx*0.08,  Cy+ry*0.28],  // Mid Africa
+    [Cx+rx*0.14,  Cy+ry*0.48],  // S Africa E
+    [Cx+rx*0.02,  Cy+ry*0.55],  // S Africa W
+    [Cx-rx*0.05,  Cy+ry*0.40],
+    [Cx-rx*0.02,  Cy+ry*0.18],
+    [Cx+rx*0.02,  Cy+ry*0.05],
+    [Cx-0,        Cy-ry*0.10]
+  ]); ox.fill();
+
+  // Eurasia (to the right)
+  blobPath([
+    [Cx+rx*0.12,  Cy-ry*0.28],
+    [Cx+rx*0.28,  Cy-ry*0.32], // Scandinavia-ish top
+    [Cx+rx*0.42,  Cy-ry*0.26],
+    [Cx+rx*0.54,  Cy-ry*0.10], // Siberia
+    [Cx+rx*0.56,  Cy+ry*0.05],
+    [Cx+rx*0.48,  Cy+ry*0.10],
+    [Cx+rx*0.35,  Cy+ry*0.06],
+    [Cx+rx*0.22,  Cy-ry*0.02],
+    [Cx+rx*0.16,  Cy-ry*0.10]
+  ]); ox.fill();
+
+  // Arabian Peninsula
+  ox.beginPath();
+  ox.ellipse(Cx+rx*0.22, Cy+ry*0.10, rx*0.08, ry*0.07, 0.5, 0, Math.PI*2);
+  ox.fill();
+
+  // India
+  ox.beginPath();
+  ox.ellipse(Cx+rx*0.28, Cy+ry*0.20, rx*0.07, ry*0.09, 0.3, 0, Math.PI*2);
+  ox.fill();
+
+  // SE Asia archipelago (cluster)
+  ox.beginPath();
+  ox.ellipse(Cx+rx*0.40, Cy+ry*0.20, rx*0.06, ry*0.05, 0.2, 0, Math.PI*2);
+  ox.fill();
+  ox.beginPath();
+  ox.ellipse(Cx+rx*0.46, Cy+ry*0.28, rx*0.06, ry*0.05, -0.3, 0, Math.PI*2);
+  ox.fill();
+
+  // Australia
+  ox.beginPath();
+  ox.ellipse(Cx+rx*0.50, Cy+ry*0.40, rx*0.14, ry*0.10, -0.2, 0, Math.PI*2);
+  ox.fill();
+
+  // coast highlight (subtle)
+  ox.strokeStyle=coast; ox.lineWidth=1.2;
+  ox.beginPath(); ox.arc(Cx,Cy,R-1,0,Math.PI*2); ox.stroke();
+
+  // cloud bands (stable)
+  ox.fillStyle='rgba(255,255,255,0.08)';
+  for(let i=0;i<30;i++){
+    const a = -0.4 + i*0.027;
+    const yy = Cy + Math.sin(a)*R*0.55;
+    ox.fillRect(Cx-R, yy, R*2, 1.5);
+  }
+
+  // Terminator (night side) subtle
+  const shade = ox.createRadialGradient(Cx-R*0.2,Cy-R*0.2,R*0.2, Cx+R*0.4,Cy+R*0.4,R*1.2);
+  shade.addColorStop(0,'rgba(0,0,0,0)');
+  shade.addColorStop(1,'rgba(0,0,0,0.25)');
+  ox.fillStyle=shade; ox.fillRect(0,0,S,S);
+
+  ox.restore();
+  earthTex = off;
+}
+
+let asteroid = null;
+let impactDone = false, impactTime = 0;
+let emberField = []; // lingering embers after impact
+
+function resetAsteroid(ex,ey,R){
+  const startX = -R*1.8, startY = ey - R*1.6;
+  const dx = ex - startX, dy = ey - startY;
+  const dist = Math.hypot(dx,dy);
+  const speed = Math.max(3, Math.min(9, R*0.02));
+  const vx = dx/dist * speed;
+  const vy = dy/dist * speed;
+  asteroid = { x:startX, y:startY, vx, vy, r: Math.max(10, R*0.10), active:true };
+  impactDone = false; impactTime = 0; emberField.length = 0;
+}
+
+function startCutscene(){
+  mode='cutscene'; cutStart=performance.now();
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  const R = Math.max(120, Math.floor(h*0.32));
+  buildEarthTexture(R);
+  const ex=w*0.5, ey=h*0.56;
+  resetAsteroid(ex,ey,R);
+}
+
+function drawEarthAt(ex,ey,R){
+  // halo
+  for(let r=R+80;r>R;r-=10){ ctx.fillStyle='rgba(80,130,255,0.02)'; ctx.beginPath(); ctx.arc(ex,ey,r,0,Math.PI*2); ctx.fill(); }
+  // texture
+  const S = earthTex.width;
+  ctx.drawImage(earthTex, ex - S/2, ey - S/2);
+}
+
+function drawAsteroid(){
+  if(!asteroid || !asteroid.active) return;
+  // trail
+  ctx.strokeStyle='rgba(255,210,160,0.35)';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(asteroid.x - asteroid.vx*10, asteroid.y - asteroid.vy*10);
+  ctx.lineTo(asteroid.x, asteroid.y);
+  ctx.stroke();
+
+  // body + heated glow
+  ctx.fillStyle='#6f5a50';
+  ctx.beginPath();
+  ctx.ellipse(asteroid.x, asteroid.y, asteroid.r*1.2, asteroid.r*0.9, Math.atan2(asteroid.vy, asteroid.vx), 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle='rgba(255,160,80,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(asteroid.x-asteroid.vx*0.5, asteroid.y-asteroid.vy*0.5, asteroid.r*1.7, asteroid.r*1.2, 0, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function updateAsteroid(ex,ey,R,now){
+  if(!asteroid || !asteroid.active) return;
+  asteroid.x += asteroid.vx;
+  asteroid.y += asteroid.vy;
+
+  const d = Math.hypot(asteroid.x-ex, asteroid.y-ey);
+  if(d <= Math.max(10, R*0.12)){ // impact at center-ish
+    asteroid.active = false;
+    impactDone = true;
+    impactTime = now;
+
+    // seed ember field
+    for(let i=0;i<180;i++){
+      const ang = Math.random()*Math.PI*2;
+      const spd = 2 + Math.random()*5;
+      emberField.push({
+        x:ex, y:ey,
+        vx:Math.cos(ang)*spd,
+        vy:Math.sin(ang)*spd*0.85,
+        a:0.9, r:1+Math.random()*2
+      });
+    }
+  }
+}
+
+function drawImpact(ex,ey,R,now){
+  if(!impactDone) return;
+  const t = (now - impactTime); // ms since impact
+
+  // Stage 1: hot flash (0–450ms)
+  if(t < 450){
+    const k = 1 - t/450;
+    ctx.fillStyle = `rgba(255,240,200,${0.50*k})`;
+    ctx.fillRect(0,0,canvas.width/DPR,canvas.height/DPR);
+  }
+
+  // Stage 2: multiple shock rings (start at 200ms, last through ~2600ms)
+  const rings = 4;
+  for(let i=0;i<rings;i++){
+    const delay = 200 + i*250;
+    const life = t - delay;
+    if(life > 0 && life < 2200){
+      const ringR = life * (0.35 + i*0.05);
+      const alpha = Math.max(0, 0.25 - life/2200*0.25);
+      ctx.strokeStyle = `rgba(255,200,140,${alpha})`;
+      ctx.lineWidth = 2 + Math.max(0, 6 - life/350);
+      ctx.beginPath();
+      ctx.arc(ex,ey, ringR, 0, Math.PI*2);
+      ctx.stroke();
+    }
+  }
+
+  // Stage 3: debris rays (0–3200ms)
+  if(t < 3200){
+    const amount = Math.min(220, Math.floor(t/8));
+    ctx.strokeStyle='rgba(255,140,80,0.25)';
+    ctx.lineWidth=1;
+    for(let i=0;i<amount;i++){
+      const a = (i*24)%(Math.PI*2);
+      const len = 28 + (i%20)*3 + t*0.05;
+      const sx = ex + Math.cos(a)* (10 + (i%7)*3);
+      const sy = ey + Math.sin(a)* (10 + (i%7)*2);
+      ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(sx+Math.cos(a)*len, sy+Math.sin(a)*len*0.85); ctx.stroke();
+    }
+  }
+
+  // Stage 4: lingering ember field + smoke (0–4000ms+)
+  for(const p of emberField){
+    p.x += p.vx; p.y += p.vy; p.vx *= 0.995; p.vy *= 0.995; p.a *= 0.985;
+    ctx.fillStyle = `rgba(255,180,120,${Math.max(0,p.a)})`;
+    ctx.fillRect(p.x, p.y, p.r, p.r);
+  }
+  emberField = emberField.filter(p => p.a > 0.05);
+
+  // faint smoke veil
+  if(t < 4500){
+    const smokeA = Math.max(0, 0.25 - t/4500*0.25);
+    ctx.fillStyle = `rgba(50,40,40,${smokeA})`;
+    ctx.fillRect(0,0,canvas.width/DPR,canvas.height/DPR);
+  }
+}
+
+/* ======================= STARFIELD ======================= */
+const starLayers=[{count:130,speed:0.05,size:[0.8,1.6],stars:[]},{count:110,speed:0.10,size:[1.0,2.0],stars:[]},{count:80,speed:0.18,size:[1.2,2.6],stars:[]}];
+function initStars(){ for(const L of starLayers){ L.stars=[]; for(let i=0;i<L.count;i++){ L.stars.push({x:Math.random()*canvas.width/DPR,y:Math.random()*canvas.height/DPR,s:lerp(L.size[0],L.size[1],Math.random()),p:Math.random()*Math.PI*2}); } } }
+function drawStars(mult,tint=[8,18,40],px=0,py=0){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  const sky=ctx.createLinearGradient(0,0,0,h);
+  sky.addColorStop(0,`rgb(${tint[0]},${tint[1]},${tint[2]})`);
+  sky.addColorStop(0.55,`rgb(${(tint[0]*0.7)|0},${(tint[1]*0.7)|0},${(tint[2]*0.9)|0})`);
+  sky.addColorStop(1,'#02050d'); ctx.fillStyle=sky; ctx.fillRect(0,0,w,h);
+
+  const cx=w*0.25+px*0.18, cy=h*0.3+py*0.12;
+  for(let i=0;i<115;i++){ const a=i*0.23+(t*0.00008), r=2+i*1.6, x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r, al=0.32-i*0.0024; if(al<=0)break;
+    ctx.fillStyle=`rgba(170,150,255,${al})`; ctx.fillRect(Math.round(x),Math.round(y),1.5,1.5); }
+
+  for(const L of starLayers){
+    for(const s of L.stars){
+      s.y+=L.speed*mult; if(s.y>h+2){ s.y=-2; s.x=Math.random()*w; }
+      const tw=0.5+0.5*Math.sin(t*0.002+s.p); ctx.globalAlpha=0.6+0.4*tw; ctx.fillStyle='#fff';
+      ctx.fillRect(Math.round(s.x+px*0.05),Math.round(s.y+py*0.03),s.s,s.s);
+    }
+  }
+  ctx.globalAlpha=1;
+  drawBandPlanet(w*0.82+Math.sin(t*0.0002)*6+px*0.12, h*0.38+py*0.08, 80,['#1e4ea8','#2e6fd1','#193564'],18);
+  drawBandPlanet(w*0.56+Math.cos(t*0.00027)*5+px*0.09, h*0.22+py*0.06, 42,['#9a4422','#d78341','#7a2f18'],10);
+}
+function drawBandPlanet(cx,cy,R,colors,bands){
+  for(let r=R+40;r>R;r-=6){ ctx.fillStyle='rgba(255,255,255,0.02)'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill(); }
+  const grd=ctx.createRadialGradient(cx-R*0.35,cy-R*0.35,R*0.2,cx,cy,R); grd.addColorStop(0,colors[1]); grd.addColorStop(1,colors[2]);
+  ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,R-1,0,Math.PI*2); ctx.clip();
+  for(let i=0;i<bands;i++){ const y=cy+(i/bands*2-1)*(R*0.85), h=Math.max(1.5,R*0.06*(1-Math.abs((i/bands*2-1))));
+    ctx.fillStyle=i%2? colors[0]:colors[1]; ctx.globalAlpha=0.35+0.25*Math.cos(i*1.2); ctx.fillRect(cx-R,y-h/2,R*2,h); }
+  ctx.restore(); ctx.globalAlpha=1;
+}
+
+/* ======================= COOL SHIP ======================= */
+let exhaust=[];
+function drawShipCool(cx,cy,scale=1,thrust=false){
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(scale,scale); ctx.rotate(Math.sin(t*0.015)*0.03);
+  ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(0,36,64,18,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#a7c8d6'; ctx.beginPath(); ctx.moveTo(0,-28); ctx.lineTo(24,-8); ctx.lineTo(30,12); ctx.lineTo(-30,12); ctx.lineTo(-24,-8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#2bd9ff'; ctx.beginPath(); ctx.ellipse(0,-6,14,10,0,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(0,-6,14,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle='#8aa6b5'; ctx.fillRect(-34,8,16,10); ctx.fillRect(18,8,16,10);
+  ctx.fillStyle='#506777'; ctx.fillRect(-32,10,12,6); ctx.fillRect(20,10,12,6);
+  ctx.fillStyle='#9fb8c7'; ctx.fillRect(-46,6,10,6); ctx.fillRect(36,6,10,6);
+  ctx.fillStyle='#cfe6f0'; ctx.fillRect(-4,-26,8,8);
+  if(thrust){
+    ctx.fillStyle='#bde8ff'; ctx.fillRect(-46,6,10,6); ctx.fillRect(36,6,10,6);
+    for(let i=0;i<3;i++){ const f=(Math.sin((t*0.02)+i)*0.5+0.5); ctx.fillStyle=`rgba(90,220,255,${0.35+0.4*f})`;
+      ctx.beginPath(); ctx.ellipse(-50,9,8+8*f,12+12*f,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(50,9,8+8*f,12+12*f,0,0,Math.PI*2); ctx.fill();
+    }
+    exhaust.push({x:cx-56,y:cy+9,vx:-2.2+Math.random()*-0.8,vy:(Math.random()-0.5)*0.6,a:0.8});
+    exhaust.push({x:cx+56,y:cy+9,vx: 2.2+Math.random()* 0.8,vy:(Math.random()-0.5)*0.6,a:0.8});
+  }
+  ctx.restore();
+}
+function drawExhaust(){ ctx.fillStyle='rgba(120,220,255,0.6)'; for(const p of exhaust){ p.x+=p.vx; p.y+=p.vy; p.a*=0.96; ctx.globalAlpha=p.a; ctx.fillRect(p.x,p.y,3,2);} ctx.globalAlpha=1; exhaust=exhaust.filter(p=>p.a>0.05); }
+
+/* ======================= UTILS/NOISE ======================= */
+function lerp(a,b,t){return a+(b-a)*t;}
+function xorshift(seed){let x=seed|0||123456789;return()=>{x^=x<<13; x^=x>>>17; x^=x<<5; return (x>>>0)/4294967296}}
+function perlin1D(rng){const g=[];for(let i=0;i<1024;i++)g[i]=rng()*2-1;return x=>{const xi=Math.floor(x),xf=x-xi,u=xf*xf*(3-2*xf);const g0=g[xi&1023],g1=g[(xi+1)&1023];return lerp(g0*xf,g1*(xf-1),u);}}
+
+/* ======================= TERRAIN ======================= */
+let terrainCache=null;
+function buildTerrain(seed,surfaceTint){
+  const rng=xorshift(seed);
+  const w=canvas.width/DPR,h=canvas.height/DPR, groundTop=Math.floor(h*0.72);
+  const craters=[]; let x=30; while(x<w-30){ const r=16+rng()*22, cx=x+10+rng()*10, cy=groundTop+6+rng()*10; craters.push({cx,cy,r}); x+=52+rng()*40; }
+  const rocks=[]; for(let i=0;i<Math.floor(w/28);i++){ rocks.push({x:10+rng()*(w-20),y:groundTop-2+rng()*8,w:4+rng()*10,h:3+rng()*6}); }
+  const base=surfaceTint, shade=[base[0]-45,base[1]-45,base[2]-45], light=[base[0]+28,base[1]+28,base[2]+28];
+  return {groundTop,craters,rocks,base,shade,light};
+}
+function drawLanding(cache,tint=[8,18,40], px=0, py=0){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  const {groundTop,craters,rocks,base,shade,light}=cache;
+  drawStars(0.35,tint, px*0.6, py*0.4);
+
+  const haze=ctx.createLinearGradient(0,groundTop-60,0,groundTop+100); haze.addColorStop(0,'rgba(200,220,255,0.20)'); haze.addColorStop(1,'rgba(10,12,18,1)'); ctx.fillStyle=haze; ctx.fillRect(0,groundTop-60,w,160);
+
+  const curve=0.018, camY = Math.sin(sway)*3 + py*0.4;
+  ctx.save(); ctx.translate(px, camY);
+  for(let y=0;y<h-groundTop;y++){
+    const p=y/(h-groundTop);
+    const r=Math.floor(base[0]-20+p*40), g=Math.floor(base[1]-22+p*32), b=Math.floor(base[2]-18+p*26);
+    ctx.fillStyle=`rgb(${r},${g},${b})`;
+    const off=Math.sin(y*(Math.PI/(h-groundTop)))*w*curve;
+    ctx.fillRect(off,groundTop+y,w-2*off,1);
+  }
+  const sunX=w*0.52, sunY=groundTop+36;
+  for(let r=140;r>0;r-=10){ ctx.fillStyle='rgba(255,210,160,0.02)'; ctx.beginPath(); ctx.arc(sunX,sunY,r,0,Math.PI*2); ctx.fill(); }
+
+  for(const c of craters){
+    const grd=ctx.createRadialGradient(c.cx,c.cy,c.r*0.1,c.cx,c.cy,c.r);
+    grd.addColorStop(0,`rgb(${shade[0]},${shade[1]},${shade[2]})`); grd.addColorStop(1,`rgb(${base[0]-15},${base[1]-15},${base[2]-15})`);
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.ellipse(c.cx,c.cy,c.r*1.15,c.r*0.48,0,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=`rgba(${light[0]},${light[1]},${light[2]},0.55)`; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.ellipse(c.cx-3,c.cy-2,c.r*1.08,c.r*0.42,0,Math.PI*0.1,Math.PI*0.95); ctx.stroke();
+    ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(c.cx-8,c.cy+4,c.r*1.0,c.r*0.22,0,0,Math.PI*2); ctx.fill();
+  }
+  for(const r of rocks){
+    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(Math.round(r.x+2),Math.round(r.y+2),Math.round(r.w),Math.round(r.h));
+    ctx.fillStyle=`rgb(${base[0]-25},${base[1]-25},${base[2]-25})`; ctx.fillRect(Math.round(r.x),Math.round(r.y),Math.round(r.w),Math.round(r.h));
+    ctx.fillStyle=`rgba(${light[0]},${light[1]},${light[2]},0.6)`; ctx.fillRect(Math.round(r.x),Math.round(r.y),Math.max(1,Math.round(r.w*0.35)),1);
+  }
+  ctx.restore();
+
+  ctx.globalAlpha=0.15; for(let i=groundTop;i<h;i+=2){ ctx.fillStyle='rgba(255,255,255,0.05)'; ctx.fillRect(0,i,w,1); } ctx.globalAlpha=1;
+}
+
+/* ======================= DUST / HELMET / THERMOMETER ======================= */
+let dust=[]; function initDust(){ const w=canvas.width/DPR,h=canvas.height/DPR; dust=Array.from({length:40},()=>({x:Math.random()*w,y:Math.random()*h,s:1+Math.random()*2,v:0.1+Math.random()*0.2})); }
+function drawDust(){ ctx.fillStyle='rgba(255,255,255,0.06)'; for(const p of dust){ p.x+=p.v; if(p.x>canvas.width/DPR)p.x=-5; ctx.fillRect(p.x,p.y,p.s,p.s);} }
+function drawHelmetGlass(){ const w=canvas.width/DPR,h=canvas.height/DPR; const grad=ctx.createRadialGradient(w/2,h/2,h*0.1,w/2,h/2,h*0.9); grad.addColorStop(0,'rgba(255,255,255,0)'); grad.addColorStop(1,'rgba(255,255,255,0.07)'); ctx.fillStyle=grad; ctx.fillRect(0,0,w,h); }
+let surfaceTemp=273,targetTemp=273;
+function drawThermometer(){ const x=30,y=canvas.height/DPR-200,w=30,h=160; const grad=ctx.createLinearGradient(0,y,0,y+h); grad.addColorStop(0,"#00ffff"); grad.addColorStop(1,"#ff5500"); ctx.strokeStyle="#00ff66"; ctx.lineWidth=2; ctx.strokeRect(x,y,w,h); const fillHeight=Math.min(h,(surfaceTemp/700)*h); ctx.fillStyle=grad; ctx.fillRect(x+2,y+h-fillHeight,w-4,Math.max(0,fillHeight-2)); ctx.fillStyle="#00ff66"; ctx.font="12px monospace"; ctx.fillText(`${Math.round(surfaceTemp)}K`,x-2,y-6); }
+
+/* ======================= MISSION & FX ======================= */
+const postPanel=document.getElementById('postPanel'); const checks=[null,'s1','s2','s3','s4','s5'].map(id=> id? document.getElementById(id):null); const fill=document.getElementById('missionFill');
+let missionStep=0;
+function showMission(){ postPanel.style.display='block'; }
+function hideMission(){ postPanel.style.display='none'; }
+function markStep(n){ for(let i=1;i<=5;i++){ checks[i].classList.toggle('done', i<=n); checks[i].textContent=i<=n?'✓':' '; } fill.style.width=(n/5*100)+'%'; }
+function resetMission(){ missionStep=0; markStep(0); statusEl.textContent=`Mission idle at ${selectedPlanet.name}`; }
+function skipMission(){ missionStep=5; markStep(5); statusEl.textContent=`Surface ops complete on ${selectedPlanet.name}`; }
+function advanceMission(){
+  if(missionStep>=5) return;
+  missionStep++; markStep(missionStep);
+  if(missionStep===1){ statusEl.textContent='Orbital insertion nominal'; pulseScreen('#00ffaa22'); }
+  if(missionStep===2){ statusEl.textContent='Atmospheric entry — heat shield engaged'; entryShake(); entryPlasma(); }
+  if(missionStep===3){ statusEl.textContent='Touchdown confirmed — dust settling'; dustBurst(); }
+  if(missionStep===4){ statusEl.textContent='Deploying satellite to low orbit'; placeSatellite(); }
+  if(missionStep===5){ statusEl.textContent='Surface scan running…'; scanSweep(); setTimeout(()=>statusEl.textContent=`Surface ops complete on ${selectedPlanet.name}`,1200); }
+}
+
+let fx={plasma:0, shake:0, dust:[], sat:null, scan:0, pulse:null};
+function pulseScreen(){ fx.pulse={t:0}; setTimeout(()=>fx.pulse=null,500); }
+function entryShake(){ fx.shake=700; setTimeout(()=>fx.shake=0,700); }
+function entryPlasma(){ fx.plasma=1200; setTimeout(()=>fx.plasma=0,1200); }
+function dustBurst(){ const w=canvas.width/DPR,h=canvas.height/DPR; fx.dust=[]; for(let i=0;i<70;i++){ fx.dust.push({x:Math.random()*w,y:h*0.74+Math.random()*30,vx:(Math.random()-0.5)*1.4,vy:-Math.random()*1.6,a:0.5+Math.random()*0.4}); } setTimeout(()=>fx.dust=[],1800); }
+function placeSatellite(){ const w=canvas.width/DPR,h=canvas.height/DPR; fx.sat={x:w*0.18,y:h*0.46, t:0, r:0}; }
+function scanSweep(){ fx.scan=1000; setTimeout(()=>fx.scan=0,1000); }
+
+/* Satellite drawing */
+function drawSatellite(s){
+  s.t += 0.02; s.r += 0.01;
+  const bob = Math.sin(s.t)*6;
+  const px = s.x + lookX*0.25;
+  const py = s.y + bob + lookY*0.15;
+  ctx.save(); ctx.translate(px,py); ctx.rotate(Math.sin(s.r)*0.05);
+  ctx.fillStyle='#2d5cfa'; ctx.fillRect(-80,-10,60,20); ctx.fillRect(20,-10,60,20);
+  ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.strokeRect(-80,-10,60,20); ctx.strokeRect(20,-10,60,20);
+  ctx.fillStyle='rgba(255,255,255,0.15)'; for(let i=-60;i<-20;i+=10) ctx.fillRect(i,-10,2,20); for(let i=30;i<70;i+=10) ctx.fillRect(i,-10,2,20);
+  ctx.fillStyle='#c0c7d2'; ctx.fillRect(-15,-12,30,24); ctx.fillStyle='#7e8794'; ctx.fillRect(-12,-9,24,18);
+  ctx.fillStyle='#c0c7d2'; ctx.fillRect(0,-22,2,10);
+  ctx.beginPath(); ctx.arc(10,-22,8,Math.PI*0.2,Math.PI*0.8); ctx.lineTo(10,-22); ctx.closePath(); ctx.fillStyle='#bcd4e6'; ctx.fill();
+  ctx.fillStyle = (Math.floor(Date.now()/300)%2) ? '#00ff66' : 'rgba(0,255,100,0.3)'; ctx.fillRect(-2,10,4,4);
+  ctx.restore();
+}
+
+/* ======================= UI ======================= */
+const statusEl=document.getElementById('status');
+const infoPanel=document.getElementById('infoPanel');
+const arrivalButtons=document.getElementById('arrivalButtons');
+function toggleInfoPanel(){ infoPanel.style.display=(infoPanel.style.display==='none'||infoPanel.style.display==='')?'block':'none'; }
+function startSelectionMode(){
+  const choice=prompt("Choose a planet by name:\n1. W7-21\n2. X9-Zenith\n3. Orion-5\n\nType the name exactly (e.g. W7-21).");
+  if(!choice) return;
+  if(!planets[choice]){ alert("Unknown planet. Try: W7-21, X9-Zenith, Orion-5"); return; }
+  selectedPlanet=planets[choice];
+  beginTravel();
+}
+
+/* ======================= ORBIT SCENE ======================= */
+let orbitStart=0, orbitDuration=6000;
+function drawOrbitScene(){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  drawStars(0.7, selectedPlanet?selectedPlanet.skyTint:[8,18,40], lookX*0.10, lookY*0.06);
+  const sx=w*0.55, sy=h*0.55;
+  drawStarBody(sx,sy,60);
+  ctx.strokeStyle='rgba(255,255,255,0.22)';
+  ctx.beginPath(); ctx.ellipse(sx,sy,240,110,0,0,Math.PI*2); ctx.stroke();
+  const theta=(Date.now()/1600)%(Math.PI*2);
+  const px=sx+Math.cos(theta)*240;
+  const py=sy+Math.sin(theta)*110;
+  drawBandPlanet(px,py,28,['#1e4ea8','#2e6fd1','#193564'],10);
+  drawShipCool(w*0.18, h*0.18 + Math.sin(t*0.002)*8, 0.9, false);
+}
+function drawStarBody(sx,sy,SR){
+  for(let r=SR+140;r>SR;r-=10){ ctx.fillStyle='rgba(255,180,100,0.03)'; ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.fill(); }
+  const grd=ctx.createRadialGradient(sx-SR*0.3, sy-SR*0.3, SR*0.2, sx,sy,SR);
+  grd.addColorStop(0,'#ffcc88'); grd.addColorStop(1,'#c4652a');
+  ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(sx,sy,SR,0,Math.PI*2); ctx.fill();
+}
+
+/* ======================= FLOW ======================= */
+function beginTravel(){
+  mode='travel'; t=0; travelStart=performance.now(); travelDuration=9500;
+  statusEl.textContent=`Flight to ${selectedPlanet.name} — engaging drive`;
+  arrivalButtons.style.display='none';
+  targetTemp = selectedPlanet.temp || 273;
+}
+const statusAt = {
+  orbitStart: () => statusEl.textContent=`Achieved orbit around ${selectedPlanet.name}`,
+  orbitEnd:   () => statusEl.textContent=`Beginning descent to ${selectedPlanet.name}`
+};
+
+/* info buttons */
+function showPlanetProps(){ showInfo('Planetary Properties', selectedPlanet?.planetaryProps); }
+function showOrbitalProps(){ showInfo('Orbital Properties',   selectedPlanet?.orbitalProps); }
+function showStellarProps(){ showInfo('Stellar Properties',   selectedPlanet?.stellarProps); }
+function showRadiationProps(){ showInfo('Radiation',          selectedPlanet?.radiation); }
+function showInfo(title, html){
+  infoPanel.style.display='block';
+  document.getElementById('infoTitle').innerText = `${selectedPlanet?selectedPlanet.name:'Planet'} — ${title}`;
+  document.getElementById('infoContent').innerHTML = html || '<p>No planet chosen yet.</p>';
+}
+
+/* ======================= LOOP ======================= */
+let t=0,last=performance.now(),travelStart=0,travelDuration=9000;
+function frame(now){
+  const dt=now-last; last=now; t+=dt;
+  ctx.clearRect(0,0,canvas.width/DPR,canvas.height/DPR);
+
+  if(mode==='prologue'){
+    const w=canvas.width/DPR,h=canvas.height/DPR, ex=w*0.5, ey=h*0.56;
+    const R = Math.max(120, Math.floor(h*0.28));
+    if(!earthTex || earthR!==R) buildEarthTexture(R);
+    ctx.fillStyle='#03040a'; ctx.fillRect(0,0,w,h);
+    drawEarthAt(ex,ey,R);
+  }
+  else if(mode==='cutscene'){
+    const w=canvas.width/DPR,h=canvas.height/DPR, ex=w*0.5, ey=h*0.56, R=earthR;
+    ctx.fillStyle='#03040a'; ctx.fillRect(0,0,w,h);
+    drawEarthAt(ex,ey,R);
+    drawAsteroid();
+    updateAsteroid(ex,ey,R,now);
+    drawImpact(ex,ey,R,now);
+
+    const tms=now-cutStart;
+    if(tms>5200){ // give explosion more time before control returns
+      mode='idle';
+      document.getElementById('selectBtn').focus();
+    }
+    drawExhaust();
+  }
+  else if(mode==='idle'){ drawStars(0.7,[8,18,40],0,0); drawShipCool(canvas.width/DPR/2, canvas.height/DPR/2, 1.0, false); drawExhaust(); }
+  else if(mode==='travel'){
+    drawStars(2.2,[8,18,40],0,0); drawShipCool(canvas.width/DPR/2, canvas.height/DPR/2, 1.0, true); drawExhaust();
+    const p=Math.min(1,(now-travelStart)/travelDuration);
+    statusEl.textContent=`Travelling to ${selectedPlanet.name} — ${Math.floor(p*100)}%`;
+    if(p>=1){
+      mode='orbit'; orbitStart=performance.now(); statusAt.orbitStart();
+    }
+  }
+  else if(mode==='orbit'){
+    drawOrbitScene();
+    drawExhaust();
+    const elapsed = now - orbitStart;
+    if(elapsed>=orbitDuration){
+      statusAt.orbitEnd();
+      mode='landed';
+      statusEl.textContent=`Arrived at ${selectedPlanet.name}`;
+      arrivalButtons.style.display='flex';
+      terrainCache=buildTerrain(selectedPlanet.seed, selectedPlanet.surfaceTint);
+      showMission(); resetMission();
+    }
+  }
+  else if(mode==='landed'){
+    const px=lookX, py=lookY;
+    if(fx.shake>0){
+      const m=Math.min(1,fx.shake/700);
+      ctx.save(); ctx.translate((Math.random()-0.5)*8*m,(Math.random()-0.5)*6*m);
+      drawLanding(terrainCache, selectedPlanet?selectedPlanet.skyTint:[8,18,40], px, py); ctx.restore();
+    } else { drawLanding(terrainCache, selectedPlanet?selectedPlanet.skyTint:[8,18,40], px, py); }
+
+    if(fx.plasma>0){ ctx.fillStyle='rgba(255,140,40,0.10)'; ctx.fillRect(0,0,canvas.width/DPR,canvas.height/DPR); }
+    if(fx.dust.length){
+      ctx.fillStyle='rgba(200,200,200,0.25)';
+      for(const p of fx.dust){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.04; p.a*=0.985; ctx.globalAlpha=p.a; ctx.fillRect(p.x,p.y,2,2); }
+      ctx.globalAlpha=1;
+    }
+    if(fx.sat){ drawSatellite(fx.sat); }
+    if(fx.scan>0){
+      const w=canvas.width/DPR,h=canvas.height/DPR;
+      ctx.globalCompositeOperation='lighter';
+      ctx.fillStyle='rgba(120,255,160,0.06)';
+      const y=(Date.now()%1000)/1000*(h*0.28)+h*0.60;
+      ctx.fillRect(0,y,w,8);
+      ctx.globalCompositeOperation='source-over';
+    }
+
+    drawDust(); drawHelmetGlass(); drawThermometer();
+    surfaceTemp+=(targetTemp-surfaceTemp)*0.02;
+    updateLook(dt);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+/* ======================= HUD SIM & BOOT ======================= */
+let health=100,hunger=80;
+setInterval(()=>{
+  hunger=Math.max(0,hunger-0.03);
+  if(hunger<20) health=Math.max(0,health-0.02);
+  document.getElementById('healthBar').style.width=health+'%';
+  document.getElementById('hungerBar').style.width=hunger+'%';
+  document.getElementById('healthValue').textContent=Math.round(health)+'%';
+  document.getElementById('hungerValue').textContent=Math.round(hunger)+'%';
+},150);
+
+function boot(){ resize(); document.getElementById('infoPanel').style.display='none'; document.getElementById('arrivalButtons').style.display='none'; requestAnimationFrame(ts=>{ last=ts; requestAnimationFrame(frame); }); }
+boot();
+</script>
+</body>
+</html>
